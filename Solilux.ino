@@ -3,181 +3,132 @@
 #include <Wire.h>
 #include "RTClib.h"
 
+// Stepper motor pins
 #define dirPin_lux 2 
 #define stepPin_lux 3
 #define dirPin_zon 4 
 #define stepPin_zon 5
-#define Mic_port A10
-#define Servo1_port 10
-#define Servo2_port 9
-#define Buzzer 5
-#define LDRpin A14
-#define Relaypin 34
 #define StepOn 12
 
-#define Led_1 22
-#define Led_2 23
-#define Led_3 24
-#define Led_4 25
-#define Led_5 26
-#define Led_6 27
-#define Led_7 28
-#define Led_8 29
-#define Led_9 30
-#define Led_10 31
-#define Led_11 32
-#define Led_12 33
+// Other hardware pins
+#define Mic_pin A10
+#define Servo1_pin 10
+#define Servo2_pin 9
+#define Buzzer 5
+#define LDR_pin A14
+#define Relay_pin 34
 
-#define Button_1 41
-#define Button_2 38
-#define Button_3 42
-#define Button_4 45
-#define Button_5 43
-#define Button_6 37
-#define Button_7 40
-#define Button_8 39
-#define Button_9 36
+// LED pins
+const int LedPins[] = {22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33};
 
-ezButton button1(Button_1); 
-ezButton button2(Button_2); 
-ezButton button3(Button_3); 
-ezButton button4(Button_4);
-ezButton button5(Button_5);
-ezButton button6(Button_6);
-ezButton button7(Button_7);
-ezButton button8(Button_8);
-ezButton button9(Button_9);
+// Buttons (ezButton library)
+const int ButtonPins[] = {41, 38, 42, 45, 43, 37, 40, 39, 36};
 
-typedef struct {
+ezButton buttons[9] = {
+  ezButton(ButtonPins[0]), ezButton(ButtonPins[1]), ezButton(ButtonPins[2]),
+  ezButton(ButtonPins[3]), ezButton(ButtonPins[4]), ezButton(ButtonPins[5]),
+  ezButton(ButtonPins[6]), ezButton(ButtonPins[7]), ezButton(ButtonPins[8])
+};
+
+// Structs for timers and LDRs
+struct dataNode {
     int dag;
     int uur;
     int minuut;
     String settings;
     int on;
-} dataNode;
+};
 
-typedef struct {
+struct dataNode2 {
     int ll;
     String settings;
     int on;
-} dataNode2;
+};
 
+// Arrays for position/preset/status
 int positions[] = {100, 0, 50, 75, 25, 100, 0};
 int Stepper_Lux[] = {0, 3968, 0, dirPin_lux, stepPin_lux};
 int Servo_25[] = {0, 30, 60, 90, 120};
 int Step_25[] = {0, 25, 50, 75, 100};
-int ldr_status[] = {0, 0, 0, 0};
+int ldr_status[4] = {0};
 String Characters[] = {"!", "@", "$", "%", "^", "&", "*", ";", ":", "/"};
 dataNode Timers[10] = {};
 dataNode2 LDRs[4] = {};
-String Mic_functions[2] {};
-String Ldr_functions[2] {};
-String Presets[8] = {};
+String Mic_functions[2];
+String Ldr_functions[2];
+String Presets[8];
 
-int InputStep = 0;
-int TakeSteps = 0;
-Servo Servo1;
-Servo Servo2;
-int Servo1_pos = 0;
-int Servo2_pos = 0;
-int Mic_reading = 0;
-int Clapcount = 0;
-int stepcount = 0;
-bool Sspeed = 0;
-int Relay_state = false;
-RTC_DS3231 rtc;
+// Variables
+int InputStep = 0, TakeSteps = 0, Servo1_pos = 0, Servo2_pos = 0;
+int Mic_reading = 0, Clapcount = 0, stepcount = 0, Relay_state = false;
+bool Sspeed = false;
+bool Buzz_on = true, Mic_on = true, Ldr_on = true, Tim_on = true;
+bool Timers_set = false, LDR_set = false;
 
-bool Buzz_on = true;
-bool Mic_on = true;
-bool Ldr_on = true;
-bool Tim_on = true;
-bool Timers_set = false;
-bool LDR_set = false;
-
-String Incoming_string;
-String Current_code;
+String Incoming_string, Current_code;
 char Incoming_char;
-int ser2val = 0;
-int current_Parsed = 0;
-int LDRValue = 0;
-int prev_LDRValue = 0;
-int startLDR = 0;
-//ldr check
+int ser2val = 0, current_Parsed = 0;
+int LDRValue = 0, prev_LDRValue = 0, startLDR = 0;
 int last_ldrtime = -1;
+
+// Hardware instances
+Servo Servo1, Servo2;
+RTC_DS3231 rtc;
 
 void setup() {
   Serial.begin(9600);
 
-  //Declare pins as output:
+  // Declare stepper and buzzer pins as output
   pinMode(stepPin_lux, OUTPUT);
   pinMode(dirPin_lux, OUTPUT);
   pinMode(stepPin_zon, OUTPUT);
   pinMode(dirPin_zon, OUTPUT);
   pinMode(Buzzer, OUTPUT);
 
-  //Leds
-  pinMode(Led_1, OUTPUT);
-  pinMode(Led_2, OUTPUT);
-  pinMode(Led_3, OUTPUT);
-  pinMode(Led_4, OUTPUT);
-  pinMode(Led_5, OUTPUT);
-  pinMode(Led_6, OUTPUT);
-  pinMode(Led_7, OUTPUT);
-  pinMode(Led_8, OUTPUT);
-  pinMode(Led_9, OUTPUT);
-  pinMode(Led_10, OUTPUT);
-  pinMode(Led_11, OUTPUT);
-  pinMode(Led_12, OUTPUT);
+  // Declare LED pins as output
+  for (int i = 0; i < 12; i++) {
+      pinMode(LedPins[i], OUTPUT);
+  }
 
-  //Relay
+  // Initialize relay and stepper power
   pinMode(Relaypin, OUTPUT);
   digitalWrite(Relaypin, HIGH);
-  
-
   pinMode(StepOn, OUTPUT);
-  
   digitalWrite(StepOn, HIGH);
 
-  digitalWrite(Led_2, HIGH);
-  digitalWrite(Led_4, HIGH);
-  digitalWrite(Led_6, HIGH);
-  digitalWrite(Led_11, HIGH);
+  digitalWrite(LedPins[1], HIGH);
+  digitalWrite(LedPins[3], HIGH);
+  digitalWrite(LedPins[5], HIGH);
+  digitalWrite(LedPins[10], HIGH);
   
-  //Attach & position servos
-  Servo1.attach(Servo1_port);
-  Servo2.attach(Servo2_port);
+  // Attach & initialize servos
+  Servo1.attach(Servo1_pin);
+  Servo2.attach(Servo2_pin);
   Servo1.write(0);
   Servo2.write(0);
   delay(2000);
   Servo2.detach();
-
   
-  for (int i=0; i<10; i++) {
-    Timers[i].dag = Timers[i].uur = Timers[i].minuut = -1;
-    Timers[i].settings = "";
-    Timers[i].on = 0;
-    if (i<8) {
-      Presets[i] = "#xu-t-z-";
-    }
-    if (i<4) {
-      LDRs[i].ll = -1;
-      LDRs[i].settings = "";
-      LDRs[i].on = 0; 
-    }
+  // Initialize timers, presets, and LDR settings
+  for (int i = 0; i < 10; i++) {
+      Timers[i] = {-1, -1, -1, "", 0};
+      if (i < 8) Presets[i] = "#xu-t-z-";
+      if (i < 4) LDRs[i] = {-1, "", 0};
   }
   
-  for (int i=0; i<2; i++) {
-    Mic_functions[i] = Ldr_functions[i] = "#xu-t-z-";
+  // Initialize Mic and LDR functions
+  for (int i = 0; i < 2; i++) {
+      Mic_functions[i] = Ldr_functions[i] = "#xu-t-z-";
   }
 
-  //RTC setup
+  // RTC setup
   if (!rtc.begin()) {
-    Serial.println("Couldn't find RTC. Program stopped.");
+      Serial.println("Couldn't find RTC. Program stopped.");
   }
 
   if (rtc.lostPower()) {
-    Serial.println("RTC lost power");
-    rtc.adjust(DateTime(F(__DATE__), F(__TIME__)));
+      Serial.println("RTC lost power");
+      rtc.adjust(DateTime(F(__DATE__), F(__TIME__)));
   }
 }
 
@@ -185,12 +136,12 @@ void Calibrate_a() {
   while(true) {
     // Blink calibrating led
     if (rtc.now().second() % 2 == 0) {
-      digitalWrite(Led_2, HIGH); 
+      digitalWrite(LedPins[1], HIGH); 
     } else {
-      digitalWrite(Led_2, LOW);
+      digitalWrite(LedPins[1], LOW);
     }
     
-    if (digitalRead(Button_8) == LOW) {
+    if (digitalRead(ButtonPins[7]) == LOW) {
  
       digitalWrite(dirPin_lux, LOW);
       digitalWrite(StepOn, LOW);
@@ -202,7 +153,7 @@ void Calibrate_a() {
       delayMicroseconds(8);
       }
     }
-    if (digitalRead(Button_9) == LOW) {
+    if (digitalRead(ButtonPins[8]) == LOW) {
 
       digitalWrite(dirPin_lux, HIGH);
       digitalWrite(StepOn, LOW);
@@ -217,14 +168,14 @@ void Calibrate_a() {
 
     digitalWrite(StepOn, HIGH);
 
-    button7.loop();
-    if (button7.isPressed()){
+    buttons[6].loop();
+    if (buttons[6].isPressed()){
       break;
     }
   }
   Stepper_Lux[0] = 0;
-  digitalWrite(Led_2, LOW);
-  digitalWrite(Led_4, HIGH);
+  digitalWrite(LedPins[1], LOW);
+  digitalWrite(LedPins[3], HIGH);
 }
 
 void Calibrate_b() {
@@ -236,9 +187,9 @@ void Calibrate_b() {
   while (true) {
    // Blink calibrating led
    if (rtc.now().second() % 2 == 0) {
-     digitalWrite(Led_2, HIGH); 
+     digitalWrite(LedPins[1], HIGH); 
    } else {
-     digitalWrite(Led_2, LOW);
+     digitalWrite(LedPins[1], LOW);
    }
     
     if (Current_code == "#kb0") {
@@ -281,8 +232,8 @@ void Calibrate_b() {
       Serial.println(stepcount);
 
       Buzz(4);
-      digitalWrite(Led_2, LOW);
-      digitalWrite(Led_4, HIGH);
+      digitalWrite(LedPins[1], LOW);
+      digitalWrite(LedPins[3], HIGH);
       return;
     }
     digitalWrite(StepOn, HIGH);
@@ -313,7 +264,7 @@ void Parse_and_execute(String code){
   current_Parsed = Parse_data(code, 1);
   if (current_Parsed != -1) {
     if (current_Parsed/1.5 != Servo2_pos) {
-      Servo2.attach(Servo2_port);
+      Servo2.attach(Servo2_pin);
   
       if (Sspeed) {
         Servo2.write(current_Parsed/1.5);
@@ -335,14 +286,14 @@ void Parse_and_execute(String code){
       Servo2.detach();
       Serial.write(current_Parsed);
       if (current_Parsed == 0) {
-        digitalWrite(Led_5, LOW);
-        digitalWrite(Led_6, HIGH);
+        digitalWrite(LedPins[4], LOW);
+        digitalWrite(LedPins[5], HIGH);
       } else if (current_Parsed == 270) {
-        digitalWrite(Led_6, LOW);
-        digitalWrite(Led_5, HIGH);
+        digitalWrite(LedPins[5], LOW);
+        digitalWrite(LedPins[4], HIGH);
       } else {
-        digitalWrite(Led_5, LOW);
-        digitalWrite(Led_6, LOW);
+        digitalWrite(LedPins[4], LOW);
+        digitalWrite(LedPins[5], LOW);
       }
     }
   }
@@ -451,7 +402,7 @@ void Mic() {
    Clapcount++;
    delay(500);
    for (int i=0; i<500; i++) {
-     Mic_reading = analogRead(Mic_port);
+     Mic_reading = analogRead(Mic_pin);
      delay(1);
      if (Mic_reading > 600) {
        Clapcount++;
@@ -472,12 +423,12 @@ void Mic() {
 void Speed() {
   if (Sspeed) {
     Sspeed = false; //traag
-    digitalWrite(Led_11, HIGH);
-    digitalWrite(Led_12, LOW);
+    digitalWrite(LedPins[10], HIGH);
+    digitalWrite(LedPins[11], LOW);
   } else {
     Sspeed = true; //snel
-    digitalWrite(Led_12, HIGH);
-    digitalWrite(Led_11, LOW);
+    digitalWrite(LedPins[11], HIGH);
+    digitalWrite(LedPins[10], LOW);
   }
 }
 
@@ -496,23 +447,23 @@ void Lightswitch() {
 void Lightswitch2() {
   Serial.println(Relay_state);
   if (Relay_state) {
-    digitalWrite(Relaypin, HIGH);
+    digitalWrite(Relay_pin, HIGH);
     Relay_state = false;
   } else {
-    digitalWrite(Relaypin, LOW);
+    digitalWrite(Relay_pin, LOW);
     Relay_state = true;
   }
   // switch relay light 2
 }
 
 void Lightswitch2_1() {
-  digitalWrite(Relaypin, LOW);
+  digitalWrite(Relay_pin, LOW);
   Relay_state = true;
   //turn on, if it already is or not
 }
 
 void Lightswitch2_2() {
-  digitalWrite(Relaypin, HIGH);
+  digitalWrite(Relay_pin, HIGH);
   Relay_state = false;
   //turn off, if it already is or not
 }
@@ -564,14 +515,14 @@ int Nextv_servo(bool dir) {
 void Stepper_All(int pos) {
   //Update leds
   if (pos == 0) {
-    digitalWrite(Led_3, LOW);
-    digitalWrite(Led_4, HIGH);
+    digitalWrite(LedPins[2], LOW);
+    digitalWrite(LedPins[3], HIGH);
   } else if (pos == 100) {
-    digitalWrite(Led_4, LOW);
-    digitalWrite(Led_3, HIGH);
+    digitalWrite(LedPins[3], LOW);
+    digitalWrite(LedPins[2], HIGH);
   } else {
-    digitalWrite(Led_3, LOW);
-    digitalWrite(Led_4, LOW);
+    digitalWrite(LedPins[2], LOW);
+    digitalWrite(LedPins[3], LOW);
   }
     
   //Check verkeerde input
@@ -641,7 +592,7 @@ void Buzz(int select){
 }
 
 void Reposition() {
-  Servo2.attach(Servo2_port);
+  Servo2.attach(Servo2_pin);
   if (Sspeed) {
     if (Servo2_pos >= 90) {
       Servo2.write(0);
@@ -705,9 +656,9 @@ void Set_ldr(String input) {
   String Settings = Parse_string(input, 1);
   int lightlevel = 0;
   if (input[3] == 'c') {
-    lightlevel = analogRead(LDRpin);
+    lightlevel = analogRead(LDR_pin);
     delay(10);
-    lightlevel = analogRead(LDRpin);
+    lightlevel = analogRead(LDR_pin);
   } else {
     lightlevel = Parse_data(input, 14); 
   }
@@ -728,7 +679,7 @@ void Set_ldr(String input) {
     if (LDRs[i].ll == -1) {
       Empty = false;
       LDR_set = true;
-      digitalWrite(Led_9, HIGH);
+      digitalWrite(LedPins[8], HIGH);
       LDRs[i].ll = lightlevel;
       LDRs[i].settings = Settings;
       LDRs[i].on = 1;
@@ -759,7 +710,7 @@ void Set_timer(String input) {
     if (Timers[i].dag == -1) {
       Empty = false;
       Timers_set = true;
-      digitalWrite(Led_10, HIGH);
+      digitalWrite(LedPins[9], HIGH);
       Timers[i].dag = Day;
       Timers[i].uur = Hour;
       Timers[i].minuut = Minute;
@@ -786,104 +737,98 @@ String Get_settings() {
 }
 
 void loop() {
-  //Physical buttons
-  button1.loop(); 
-  button2.loop(); 
-  button3.loop(); 
-  button4.loop(); 
-  button5.loop(); 
-  button6.loop(); 
-  button7.loop(); 
-  button8.loop(); 
-  button9.loop(); 
+  // Check state of all physical buttons
+  for (int i = 0; i < 9; i++) {
+    buttons[i].loop();
+  }
   
   //Lightswitch 1
-  if(button1.isPressed()) {
+  if(buttons[0].isPressed()) {
     Buzz(0);
-    digitalWrite(Led_1, HIGH);
+    digitalWrite(LedPins[0], HIGH);
     Lightswitch();
-    digitalWrite(Led_1, LOW);
+    digitalWrite(LedPins[0], LOW);
   }
   //Preset button 4
-  if(button2.isPressed()) {
+  if(buttons[1].isPressed()) {
     Serial.println("37");
     Buzz(0);
-    digitalWrite(Led_1, HIGH);
+    digitalWrite(LedPins[0], HIGH);
     Lightswitch2();
-    digitalWrite(Led_1, LOW);
+    digitalWrite(LedPins[0], LOW);
   }
   //Preset button 8
-  if(button3.isPressed()) {
+  if(buttons[2].isPressed()) {
     Serial.println("38");
     Buzz(0);
-    digitalWrite(Led_1, HIGH);
+    digitalWrite(LedPins[0], HIGH);
     int val = Nextv_stepper(true);
     Stepper_All(val);
-    digitalWrite(Led_1, LOW);
+    digitalWrite(LedPins[0], LOW);
   }
   //Lightbutton
-  if(button4.isPressed()) {
+  if(buttons[3].isPressed()) {
     Serial.println("39");
     Buzz(0);
-    digitalWrite(Led_1, HIGH);
+    digitalWrite(LedPins[0], HIGH);
     int val = Nextv_stepper(false);
     Stepper_All(val);
-    digitalWrite(Led_1, LOW);
+    digitalWrite(LedPins[0], LOW);
   }
   //Lux up 25%
-  if(button5.isPressed()) {
+  if(buttons[4].isPressed()) {
     Serial.println("40");
     Buzz(0);
-    digitalWrite(Led_1, HIGH);
+    digitalWrite(LedPins[0], HIGH);
     int val = Nextv_servo(true) * 1.5;
     Serial.println(val);
     Parse_and_execute("#xxu-t" + String(val) + "z-");
-    digitalWrite(Led_1, LOW);
+    digitalWrite(LedPins[0], LOW);
   }
 
   //Tilt open 25%
-  if(button6.isPressed()) {
+  if(buttons[5].isPressed()) {
     Serial.println("41");
     Buzz(0);
-    digitalWrite(Led_1, HIGH);
+    digitalWrite(LedPins[0], HIGH);
     int val = Nextv_servo(false) * 1.5;
     Serial.println(val);
     Parse_and_execute("#xxu-t" + String(val) + "z-");
-    digitalWrite(Led_1, LOW);
+    digitalWrite(LedPins[0], LOW);
   }
   
   //Sun screen
-   if(button7.isPressed()) {
+   if(buttons[6].isPressed()) {
     Serial.println("42");
     Buzz(4);
-    digitalWrite(Led_1, HIGH);
+    digitalWrite(LedPins[0], HIGH);
     Calibrate_a();
     Buzz(4);
-    digitalWrite(Led_10, LOW);
+    digitalWrite(LedPins[0], LOW);
    }
    
   //Lux down 25%
-  if(button8.isPressed()) {
+  if(buttons[7].isPressed()) {
     Serial.println("43");
     Buzz(0);
-    digitalWrite(Led_1, HIGH);
+    digitalWrite(LedPins[0], HIGH);
     Parse_and_execute(Presets[3]);
-    digitalWrite(Led_1, LOW);
+    digitalWrite(LedPins[0], LOW);
   }
   //Tilt close 25%
-  if(button9.isPressed()) {
+  if(buttons[8].isPressed()) {
     Serial.println("45");
     Buzz(0);
-    digitalWrite(Led_1, HIGH);
+    digitalWrite(LedPins[0], HIGH);
     Parse_and_execute(Presets[7]);
-    digitalWrite(Led_1, LOW);
+    digitalWrite(LedPins[0], LOW);
   }
   
-//Microfone
+  //Microfone
  if (Mic_on) {
-   Mic_reading = analogRead(Mic_port);
+   Mic_reading = analogRead(Mic_pin);
    delay(10);
-   Mic_reading = analogRead(Mic_port);
+   Mic_reading = analogRead(Mic_pin);
    Serial.println(Mic_reading);
    if (Mic_reading > 530) {
      Serial.print(Mic_reading);
@@ -920,7 +865,7 @@ void loop() {
       if (now.minute() % 5 == 0 && last_ldrtime != now.minute()) {
         last_ldrtime = now.minute();
         Serial.println(now.minute());
-        LDRValue = analogRead(LDRpin);
+        LDRValue = analogRead(LDR_pin);
         Serial.println(LDRValue);
         for (int i=0; i<4; i++) {
           if (LDRs[i].on == 1) {
@@ -946,7 +891,7 @@ void loop() {
   
   //Bluetooth input
   if (Serial.available()>0) {
-    digitalWrite(Led_1, HIGH); 
+    digitalWrite(LedPins[0], HIGH); 
     Incoming_char = Serial.read();
     if (Incoming_char == ',') {
       if (Incoming_string.length() > 3 && Incoming_string[0] == '#') {
@@ -1048,9 +993,9 @@ void loop() {
             }
           }
           if (Off) {
-            digitalWrite(Led_10, LOW);
+            digitalWrite(LedPins[9], LOW);
           } else {
-            digitalWrite(Led_10, HIGH);
+            digitalWrite(LedPins[9], HIGH);
           }
         //Empty timers list
         } else if (Incoming_string[1] == 'w') {
@@ -1058,7 +1003,7 @@ void loop() {
             Timers[i].dag = -1; //mit app check alleen de dag
           }
           Timers_set = false;
-          digitalWrite(Led_10, LOW);
+          digitalWrite(LedPins[9], LOW);
         //Remove single timer
         } else if (Incoming_string[1] == 'c') {
           Timers[Parse_data(Incoming_string, 13)].dag = -1; //mit app check alleen de dag
@@ -1070,7 +1015,7 @@ void loop() {
           }
           if (Empty) {
             Timers_set = false;
-            digitalWrite(Led_10, LOW);
+            digitalWrite(LedPins[9], LOW);
           }
         //Set ldr on/off
         } else if (Incoming_string[1] == 'v') {
@@ -1086,9 +1031,9 @@ void loop() {
             }
           }
           if (Off) {
-            digitalWrite(Led_9, LOW);
+            digitalWrite(LedPins[8], LOW);
           } else {
-            digitalWrite(Led_9, HIGH);
+            digitalWrite(LedPins[8], HIGH);
           }
         //Empty ldr list
         } else if (Incoming_string[1] == 'y') {
@@ -1096,7 +1041,7 @@ void loop() {
             LDRs[i].ll = -1; //mit app check alleen lightlevel
           }
           LDR_set = false;
-          digitalWrite(Led_9, LOW);
+          digitalWrite(LedPins[8], LOW);
         //Remove single ldr
         } else if (Incoming_string[1] == 'z') {
           LDRs[Parse_data(Incoming_string, 13)].ll = -1; //mit app check alleen de dag
@@ -1108,7 +1053,7 @@ void loop() {
           }
           if (Empty) {
             LDR_set = false;
-            digitalWrite(Led_9, LOW);
+            digitalWrite(LedPins[8], LOW);
           }
         } else if (Incoming_string == "#lal0") {
           Reposition();
@@ -1125,6 +1070,6 @@ void loop() {
     else {
       Incoming_string += Incoming_char;
     }
-    digitalWrite(Led_1, LOW);
+    digitalWrite(LedPins[0], LOW);
   }
 }
