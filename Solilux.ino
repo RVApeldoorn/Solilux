@@ -132,70 +132,65 @@ void setup() {
   }
 }
 
+// Calibrate height blinds via physical buttons
 void Calibrate_a() {
-  while(true) {
-    // Blink calibrating led
-    if (rtc.now().second() % 2 == 0) {
-      digitalWrite(LedPins[1], HIGH); 
-    } else {
-      digitalWrite(LedPins[1], LOW);
-    }
-    
+  while (true) {
+    // Blink calibrating LED
+    digitalWrite(LedPins[1], rtc.now().second() % 2 == 0 ? HIGH : LOW);
+
+    // Button 8, move motor clockwise
     if (digitalRead(ButtonPins[7]) == LOW) {
- 
-      digitalWrite(dirPin_lux, LOW);
-      digitalWrite(StepOn, LOW);
+      digitalWrite(dirPin_lux, LOW);  // Set direction
+      digitalWrite(StepOn, LOW);      // Enable higher step (more quiet)
 
-      for (int i=0; i<50; i++) {
-      digitalWrite(stepPin_lux, HIGH);
-      delayMicroseconds(8);
-      digitalWrite(stepPin_lux, LOW);
-      delayMicroseconds(8);
+      for (int i = 0; i < 50; i++) {
+        digitalWrite(stepPin_lux, HIGH);
+        delayMicroseconds(8);
+        digitalWrite(stepPin_lux, LOW);
+        delayMicroseconds(8);
       }
     }
+
+    // Button 9, move motor counterclockwise
     if (digitalRead(ButtonPins[8]) == LOW) {
+      digitalWrite(dirPin_lux, HIGH);  // Set opposite direction
+      digitalWrite(StepOn, LOW);       // Enable higher step (more quiet)
 
-      digitalWrite(dirPin_lux, HIGH);
-      digitalWrite(StepOn, LOW);
-
-      for (int i=0; i<50; i++) {
-      digitalWrite(stepPin_lux, HIGH);
-      delayMicroseconds(8);
-      digitalWrite(stepPin_lux, LOW);
-      delayMicroseconds(8);
+      for (int i = 0; i < 50; i++) {
+        digitalWrite(stepPin_lux, HIGH);
+        delayMicroseconds(8);
+        digitalWrite(stepPin_lux, LOW);
+        delayMicroseconds(8);
       }
     }
 
-    digitalWrite(StepOn, HIGH);
+    digitalWrite(StepOn, HIGH); // Disable stepping
 
+    // Button 7, exit calibration
     buttons[6].loop();
-    if (buttons[6].isPressed()){
+    if (buttons[6].isPressed()) {
       break;
     }
   }
-  Stepper_Lux[0] = 0;
-  digitalWrite(LedPins[1], LOW);
-  digitalWrite(LedPins[3], HIGH);
+
+  // Reset position after calibration
+  Stepper_Lux[0] = 0; // New LOW position
+  digitalWrite(LedPins[1], LOW); // Turn off calibrating LED
+  digitalWrite(LedPins[3], HIGH); // LOW position indicator
 }
 
+// Calibration height blinds via bluetooth
 void Calibrate_b() {
   Buzz(4);
   Incoming_string = "";
   Current_code = "";
-  stepcount = 0;
-  Serial.println(stepcount);
+
   while (true) {
-   // Blink calibrating led
-   if (rtc.now().second() % 2 == 0) {
-     digitalWrite(LedPins[1], HIGH); 
-   } else {
-     digitalWrite(LedPins[1], LOW);
-   }
-    
-    if (Current_code == "#kb0") {
-      stepcount++;
-    }
-    if (Serial.available()>0) {
+    // Blink calibrating LED
+    digitalWrite(LedPins[1], rtc.now().second() % 2 == 0 ? HIGH : LOW);
+
+    // Check for incoming serial data and handle the code
+    if (Serial.available() > 0) {
       Incoming_char = Serial.read();
       if (Incoming_char == ',') {
         if (Incoming_string.length() > 3 && Incoming_string[0] == '#') {
@@ -207,35 +202,33 @@ void Calibrate_b() {
       }
     }
 
-    if (Current_code == "#kb0") {
-      digitalWrite(dirPin_lux, LOW);
+    // Calibration logic
+    if (Current_code == "#kb0" || Current_code == "#kb1") {
+      // Determine direction based on the received code
+      int direction = (Current_code == "#kb0") ? LOW : HIGH;
       
-      digitalWrite(StepOn, LOW);
-       
-      digitalWrite(stepPin_lux, HIGH);
-      delayMicroseconds(8);
-      digitalWrite(stepPin_lux, LOW);
-      delayMicroseconds(8);
-    }
-    if (Current_code == "#kb1") {
-      digitalWrite(dirPin_lux, HIGH);
-      
-      digitalWrite(StepOn, LOW);
-      
-      digitalWrite(stepPin_lux, HIGH);
-      delayMicroseconds(8);
-      digitalWrite(stepPin_lux, LOW);
-      delayMicroseconds(8);
-    }
-    if (Current_code == "#ka1") {
-      Stepper_Lux[0] = 0;
-      Serial.println(stepcount);
+      // Update the stepper direction
+      digitalWrite(dirPin_lux, direction);
+      digitalWrite(StepOn, LOW); // Enable higher step (more quiet)
 
+      // Perform a step
+      digitalWrite(stepPin_lux, HIGH);
+      delayMicroseconds(8);
+      digitalWrite(stepPin_lux, LOW);
+      delayMicroseconds(8);
+    }
+
+    // Finish calibration on receiving "#ka1"
+    if (Current_code == "#ka1") {
+      Stepper_Lux[0] = 0; // New LOW position
+      
       Buzz(4);
-      digitalWrite(LedPins[1], LOW);
-      digitalWrite(LedPins[3], HIGH);
+      digitalWrite(LedPins[1], LOW); // Turn off calibrating LED
+      digitalWrite(LedPins[3], HIGH); // LOW position indicator
       return;
     }
+
+    // Set Stepper to high once done
     digitalWrite(StepOn, HIGH);
   }
 }
