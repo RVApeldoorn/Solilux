@@ -111,7 +111,9 @@ void setup() {
   
   // Initialize timers, presets, and LDR settings
   for (int i = 0; i < 10; i++) {
-      Timers[i] = {-1, -1, -1, "", 0};
+      Timers[i].dag = Timers[i].uur = Timers[i].minuut = -1;
+      Timers[i].settings = "";
+      Timers[i].on = 0;
       if (i < 8) Presets[i] = "#xu-t-z-";
       if (i < 4) LDRs[i] = {-1, "", 0};
   }
@@ -134,6 +136,7 @@ void setup() {
 
 // Calibrate height blinds via physical buttons
 void Calibrate_a() {
+  Buzz(4);
   while (true) {
     // Blink calibrating LED
     digitalWrite(LedPins[1], rtc.now().second() % 2 == 0 ? HIGH : LOW);
@@ -169,6 +172,7 @@ void Calibrate_a() {
     // Button 7, exit calibration
     buttons[6].loop();
     if (buttons[6].isPressed()) {
+      Buzz(4);
       break;
     }
   }
@@ -233,162 +237,104 @@ void Calibrate_b() {
   }
 }
 
-void Parse_and_execute(String code){
-  Buzz(0);
+// Parse and execute received bluetooth signals
+void Parse_and_execute(String code) {
+    if (code.length() < 3) return;
 
-  //Light
-  if (code[1] == 'l'){  
-    Lightswitch();
-  }
+    Buzz(0);
 
-  if (code[2] == 'l'){  // switch 
-    Lightswitch2();
-  }
+    // Light Controls
+    if (code[1] == 'l') Lightswitch();
+    if (code[2] == 'l') Lightswitch2();
+    if (code[2] == 'a') Lightswitch2_1();
+    if (code[2] == 'o') Lightswitch2_2();
 
-  if (code[2] == 'a'){  // on if off
-    Lightswitch2_1();
-  }
+    // Luxaflex Tilt
+    current_Parsed = Parse_data(code, 1);
+    if (current_Parsed != -1 && current_Parsed / 1.5 != Servo2_pos) {
+        Servo2.attach(Servo2_pin);
+        int targetPos = current_Parsed / 1.5;
 
-  if (code[2] == 'o'){  // off if on
-    Lightswitch2_2();
-  }
-  
-  //Luxaflex tilt
-  current_Parsed = Parse_data(code, 1);
-  if (current_Parsed != -1) {
-    if (current_Parsed/1.5 != Servo2_pos) {
-      Servo2.attach(Servo2_pin);
-  
-      if (Sspeed) {
-        Servo2.write(current_Parsed/1.5);
-        Servo2_pos = current_Parsed/1.5;
-        delay(2000);
-      } else {
-        if (current_Parsed/1.5 > Servo2_pos) {
-          for (Servo2_pos; Servo2_pos < current_Parsed/1.5; Servo2_pos += 1) {
-            Servo2.write(Servo2_pos);             
-            delay(50); // waits 15 ms for the servo to reach the position
-          }       
+        if (Sspeed) {
+            Servo2.write(targetPos);
+            delay(2000);
         } else {
-          for (Servo2_pos; Servo2_pos > current_Parsed/1.5; Servo2_pos -= 1) {
-            Servo2.write(Servo2_pos);             
-            delay(50); // waits 15 ms for the servo to reach the position
-          }
+            int step = (targetPos > Servo2_pos) ? 1 : -1;
+            for (; Servo2_pos != targetPos; Servo2_pos += step) {
+                Servo2.write(Servo2_pos);
+                delay(50);
+            }
         }
-      }
-      Servo2.detach();
-      Serial.write(current_Parsed);
-      if (current_Parsed == 0) {
-        digitalWrite(LedPins[4], LOW);
-        digitalWrite(LedPins[5], HIGH);
-      } else if (current_Parsed == 270) {
-        digitalWrite(LedPins[5], LOW);
-        digitalWrite(LedPins[4], HIGH);
-      } else {
-        digitalWrite(LedPins[4], LOW);
-        digitalWrite(LedPins[5], LOW);
-      }
-    }
-  }
 
-  // Luxaflex hight
-  current_Parsed = Parse_data(code, 0);
-  if (current_Parsed != -1) {
-    Stepper_All(current_Parsed);
-    Serial.write(current_Parsed);
-  }
+        Servo2_pos = targetPos;
+        Servo2.detach();
+
+        // LED Indicators for OPEN and CLOSED positions
+        digitalWrite(LedPins[4], current_Parsed == 270);
+        digitalWrite(LedPins[5], current_Parsed == 0);
+        if (current_Parsed != 0 && current_Parsed != 270) {
+            digitalWrite(LedPins[4], LOW);
+            digitalWrite(LedPins[5], LOW);
+        }
+    }
+
+    // Luxaflex Height
+    current_Parsed = Parse_data(code, 0);
+    if (current_Parsed != -1) {
+        Stepper_All(current_Parsed);
+    }
 }
 
-int Parse_data(String data, int select){
-  //select 0 = luxaflex, 1 = tilt, 2 = zonwering
-  if (select == 0){
-    data.remove(0, data.indexOf("u")+1);
-    data.remove(data.indexOf("t"));
-    if (data == "-"){
-      return -1;
+// Extracts data from Bluetooth received string
+int Parse_data(String data, int select) {
+    struct ParseParams {
+        char startChar;
+        char endChar;
+    };
+
+    const ParseParams params[] = {
+        {'u', 't'},  // 0: Blinds Height
+        {'t', 'z'},  // 1: Blinds tilt
+        {'\0', '#'}, // 3: Index in Timer/Preset/Mic/LDR array
+        {'!', '@'},  // 4 RTC - Day
+        {'*', '$'},  // 5 RTC - Hour
+        {'$', '/'},  // 6 RTC - Minute
+        {'@', '*'},  // 7 RTC - Year
+        {'c', '!'},  // 8 RTC - Month
+        {'/', '\0'}, // 9 RTC - Seconds
+        {'t', '.'},  // 10: Timer - Day
+        {'.', '.'},  // 11: Timer - Hour
+        {'.', '#'},  // 12: Timer - Minute
+        {'m', '\0'}, // 13: Timer - Select by position in fixed list
+        {'n', '#'}   // 14: LRD threshold
+    };
+
+    if (select < 0 || select >= 15) return -1; // Invalid select value
+
+    char start = params[select].startChar;
+    char end = params[select].endChar;
+
+    // Remove everything before the start character
+    if (start != '\0') {
+        int startIndex = data.indexOf(start) + 1;
+        if (startIndex == 0) return -1; // Start character not found
+        data.remove(0, startIndex);
     }
-    return data.toInt();
-  }
-  if (select == 1){
-    data.remove(0, data.indexOf("t")+1);
-    data.remove(data.indexOf("z"));
-    if (data == "-") {
-      return -1;
+
+    // Select 12: skip two dots (distinction from hour)
+    if (select == 12) {
+        int dotIndex = data.indexOf('.');
+        if (dotIndex == -1) return -1; // First dot not found
+        data.remove(0, dotIndex + 1);
     }
-    return data.toInt();
-  }
-  if (select == 2){
-    data.remove(0, data.indexOf("z")+1);
-    if (data == "-") {
-      return -1;
+
+    // Remove everything after the end character
+    if (end != '\0') {
+        int endIndex = data.indexOf(end);
+        if (endIndex != -1) data.remove(endIndex);
     }
-    return data.toInt();
-  }
-  if (select == 3){
-    data.remove(0, 3);
-    data.remove(data.indexOf("#"));
-    return data.toInt();
-  }
-  if (select == 4){
-    data.remove(0, data.indexOf("!")+1);
-    data.remove(data.indexOf("@"));
-    Serial.println(data);
-    return data.toInt();
-  }
-  if (select == 5){
-    data.remove(0, data.indexOf("*")+1);
-    data.remove(data.indexOf("$"));
-    Serial.println(data);
-    return data.toInt();
-  }
-  if (select == 6){
-    data.remove(0, data.indexOf("$")+1);
-    data.remove(data.indexOf("/"));
-    Serial.println(data);
-    return data.toInt();
-  }
-  if (select == 7){
-    data.remove(0, data.indexOf("@")+1);
-    data.remove(data.indexOf("*"));
-    Serial.println(data);
-    return data.toInt();
-  }
-  if (select == 8){
-    data.remove(0, data.indexOf("c")+1);
-    data.remove(data.indexOf("!"));
-    Serial.println(data);
-    return data.toInt();
-  }
-  if (select == 9){
-    data.remove(0, data.indexOf("/")+1);
-    Serial.println(data);
-    return data.toInt();
-  }
-  if (select == 10){
-    data.remove(0, data.indexOf("t")+1);
-    data.remove(data.indexOf("."));
-    return data.toInt();
-  }
-  if (select == 11){
-    data.remove(0, data.indexOf(".")+1);
-    data.remove(data.indexOf("."));
-    return data.toInt();
-  }
-  if (select == 12){
-    data.remove(0, data.indexOf(".")+1);
-    data.remove(0, data.indexOf(".")+1);
-    data.remove(data.indexOf("#"));
-    return data.toInt();
-  }
-  if (select == 13){
-    data.remove(0, data.indexOf("m")+1);
-    return data.toInt();
-  }
-  if (select == 14){
-    data.remove(0, data.indexOf("n")+1);
-    data.remove(data.indexOf("#"));
-    return data.toInt();
-  }
+    
+    return (data == "-") ? -1 : data.toInt();
 }
 
 void Mic() {
