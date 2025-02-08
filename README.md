@@ -24,8 +24,7 @@ The system allows multiple control methods:
 ## ▶️ Demonstration
 | Mobile App Interface | Blinds and light control |
 |----------------------------------|-----------------------------------|
-| ![UI Mobile App](assets/ui_demo.gif) | ![Blinds in Action](assets/demo.gif) |
-
+| <img src="assets/ui_demo.gif" width="405"/> | <img src="assets/demo.gif" width="540"/> |
 
 ## 🧩 Technical Challenges
 - **Power Management** – Ensuring stable power delivery to stepper motors, servos, and sensors took some fine-tuning —and a few exploding capacitors— to get it right.
