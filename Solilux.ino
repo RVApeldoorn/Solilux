@@ -239,141 +239,135 @@ void Calibrate_b() {
 
 // Parse and execute received bluetooth signals
 void Parse_and_execute(String code) {
-    if (code.length() < 3) return;
+  if (code.length() < 3) return;
 
-    Buzz(0);
+  Buzz(0);
 
-    // Light Controls
-    if (code[1] == 'l') Lightswitch();
-    if (code[2] == 'l') Lightswitch2();
-    if (code[2] == 'a') Lightswitch2_1();
-    if (code[2] == 'o') Lightswitch2_2();
+  // Light Controls
+  if (code[1] == 'l') LightSwitch();
+  if (code[2] == 'l') LightSwitch_2();
+  if (code[2] == 'a') LightSwitch_2_1();
+  if (code[2] == 'o') LightSwitch_2_2();
 
-    // Luxaflex Tilt
-    current_Parsed = Parse_data(code, 1);
-    if (current_Parsed != -1 && current_Parsed / 1.5 != Servo2_pos) {
-        Servo2.attach(Servo2_pin);
-        int targetPos = current_Parsed / 1.5;
+  // Luxaflex Tilt
+  current_Parsed = Parse_data(code, 1);
+  if (current_Parsed != -1 && current_Parsed / 1.5 != Servo2_pos) {
+    Servo2.attach(Servo2_pin);
+    int targetPos = current_Parsed / 1.5;
 
-        if (Sspeed) {
-            Servo2.write(targetPos);
-            delay(2000);
-        } else {
-            int step = (targetPos > Servo2_pos) ? 1 : -1;
-            for (; Servo2_pos != targetPos; Servo2_pos += step) {
-                Servo2.write(Servo2_pos);
-                delay(50);
-            }
-        }
-
-        Servo2_pos = targetPos;
-        Servo2.detach();
-
-        // LED Indicators for OPEN and CLOSED positions
-        digitalWrite(LedPins[4], current_Parsed == 270);
-        digitalWrite(LedPins[5], current_Parsed == 0);
-        if (current_Parsed != 0 && current_Parsed != 270) {
-            digitalWrite(LedPins[4], LOW);
-            digitalWrite(LedPins[5], LOW);
+    if (Sspeed) {
+      Servo2.write(targetPos);
+      delay(2000);
+    } else {
+        int step = (targetPos > Servo2_pos) ? 1 : -1;
+        for (; Servo2_pos != targetPos; Servo2_pos += step) {
+          Servo2.write(Servo2_pos);
+          delay(50);
         }
     }
 
-    // Luxaflex Height
-    current_Parsed = Parse_data(code, 0);
-    if (current_Parsed != -1) {
-        Stepper_All(current_Parsed);
+    Servo2_pos = targetPos;
+    Servo2.detach();
+
+    // LED Indicators for OPEN and CLOSED positions
+    digitalWrite(LedPins[4], current_Parsed == 270);
+    digitalWrite(LedPins[5], current_Parsed == 0);
+    if (current_Parsed != 0 && current_Parsed != 270) {
+      digitalWrite(LedPins[4], LOW);
+      digitalWrite(LedPins[5], LOW);
     }
+  }
+
+  // Luxaflex Height
+  current_Parsed = Parse_data(code, 0);
+  if (current_Parsed != -1) {
+    Stepper_All(current_Parsed);
+  }
 }
 
 // Extracts data from Bluetooth received string
 int Parse_data(String data, int select) {
-    struct ParseParams {
-        char startChar;
-        char endChar;
-    };
+  struct ParseParams {
+    char startChar;
+    char endChar;
+  };
 
-    const ParseParams params[] = {
-        {'u', 't'},  // 0: Blinds Height
-        {'t', 'z'},  // 1: Blinds tilt
-        {'\0', '#'}, // 3: Index in Timer/Preset/Mic/LDR array
-        {'!', '@'},  // 4 RTC - Day
-        {'*', '$'},  // 5 RTC - Hour
-        {'$', '/'},  // 6 RTC - Minute
-        {'@', '*'},  // 7 RTC - Year
-        {'c', '!'},  // 8 RTC - Month
-        {'/', '\0'}, // 9 RTC - Seconds
-        {'t', '.'},  // 10: Timer - Day
-        {'.', '.'},  // 11: Timer - Hour
-        {'.', '#'},  // 12: Timer - Minute
-        {'m', '\0'}, // 13: Timer - Select by position in fixed list
-        {'n', '#'}   // 14: LRD threshold
-    };
+  const ParseParams params[] = {
+    {'u', 't'},  // 0: Blinds Height
+    {'t', 'z'},  // 1: Blinds tilt
+    {'\0', '#'}, // 3: Index in Timer/Preset/ClapTrigger/LDR array
+    {'!', '@'},  // 4 RTC - Day
+    {'*', '$'},  // 5 RTC - Hour
+    {'$', '/'},  // 6 RTC - Minute
+    {'@', '*'},  // 7 RTC - Year
+    {'c', '!'},  // 8 RTC - Month
+    {'/', '\0'}, // 9 RTC - Seconds
+    {'t', '.'},  // 10: Timer - Day
+    {'.', '.'},  // 11: Timer - Hour
+    {'.', '#'},  // 12: Timer - Minute
+    {'m', '\0'}, // 13: Timer - Select by position in fixed list
+    {'n', '#'}   // 14: LRD threshold
+  };
 
-    if (select < 0 || select >= 15) return -1; // Invalid select value
+  if (select < 0 || select >= 15) return -1; // Invalid select value
 
-    char start = params[select].startChar;
-    char end = params[select].endChar;
+  char start = params[select].startChar;
+  char end = params[select].endChar;
 
-    // Remove everything before the start character
-    if (start != '\0') {
-        int startIndex = data.indexOf(start) + 1;
-        if (startIndex == 0) return -1; // Start character not found
-        data.remove(0, startIndex);
-    }
-
-    // Select 12: skip two dots (distinction from hour)
-    if (select == 12) {
-        int dotIndex = data.indexOf('.');
-        if (dotIndex == -1) return -1; // First dot not found
-        data.remove(0, dotIndex + 1);
-    }
-
-    // Remove everything after the end character
-    if (end != '\0') {
-        int endIndex = data.indexOf(end);
-        if (endIndex != -1) data.remove(endIndex);
-    }
-    
-    return (data == "-") ? -1 : data.toInt();
-}
-
-void Mic() {
-   Clapcount++;
-   delay(500);
-   for (int i=0; i<500; i++) {
-     Mic_reading = analogRead(Mic_pin);
-     delay(1);
-     if (Mic_reading > 600) {
-       Clapcount++;
-     }
-   }
-   if (Clapcount == 1) {
-     Buzz(0);
-     Serial.println("1");
-     Parse_and_execute(Mic_functions[0]);
-   } else {
-     Buzz(1);
-     Serial.println("2");
-     Parse_and_execute(Mic_functions[1]);
-   }
-   Clapcount = 0;
-}
-
-void Speed() {
-  if (Sspeed) {
-    Sspeed = false; //traag
-    digitalWrite(LedPins[10], HIGH);
-    digitalWrite(LedPins[11], LOW);
-  } else {
-    Sspeed = true; //snel
-    digitalWrite(LedPins[11], HIGH);
-    digitalWrite(LedPins[10], LOW);
+  // Remove everything before the start character
+  if (start != '\0') {
+    int startIndex = data.indexOf(start) + 1;
+    if (startIndex == 0) return -1; // Start character not found
+    data.remove(0, startIndex);
   }
+
+  // Select 12: skip two dots (distinction from hour)
+  if (select == 12) {
+    int dotIndex = data.indexOf('.');
+    if (dotIndex == -1) return -1; // First dot not found
+    data.remove(0, dotIndex + 1);
+  }
+
+  // Remove everything after the end character
+  if (end != '\0') {
+    int endIndex = data.indexOf(end);
+    if (endIndex != -1) data.remove(endIndex);
+  }
+  
+  return (data == "-") ? -1 : data.toInt();
 }
 
-void Lightswitch() {
+// Detects 1 or 2 claps and triggers corresponding actions
+void ClapTrigger() {
+  Clapcount++;
+  delay(500);
+
+  for (int i = 0; i < 500; i++) {
+    if (analogRead(Mic_pin) > 600) {
+      Clapcount++;
+    }
+    delay(1);
+  }
+
+  int actionIndex = (Clapcount > 1) ? 1 : 0;
+  Buzz(actionIndex);
+  Parse_and_execute(Mic_functions[actionIndex]);
+
+  Clapcount = 0;
+}
+
+// Toggles the speed of blinds tilt
+void BlindsSpeed() {
+  Sspeed = !Sspeed;
+  
+  // Update LED indicators
+  digitalWrite(LedPins[10], !Sspeed);
+  digitalWrite(LedPins[11], Sspeed);
+}
+
+// Controls a servo to pull the string for turning the light switch on and off
+void LightSwitch() {
   for (Servo1_pos = 0; Servo1_pos <= 120; Servo1_pos += 1) { 
-    // in steps of 1 degree
     Servo1.write(Servo1_pos);             
     delay(10);                 
   }
@@ -383,100 +377,80 @@ void Lightswitch() {
   }
 }
 
-void Lightswitch2() {
-  Serial.println(Relay_state);
-  if (Relay_state) {
-    digitalWrite(Relay_pin, HIGH);
-    Relay_state = false;
-  } else {
-    digitalWrite(Relay_pin, LOW);
-    Relay_state = true;
-  }
-  // switch relay light 2
+// Toggle light, regardless of current state
+void LightSwitch_2() {
+  digitalWrite(Relay_pin, !Relay_state); 
+  Relay_state = !Relay_state;
 }
 
-void Lightswitch2_1() {
+// Turn light on
+void LightSwitch_2_1() {
+  if (Relay_state) return;
   digitalWrite(Relay_pin, LOW);
   Relay_state = true;
-  //turn on, if it already is or not
 }
 
-void Lightswitch2_2() {
+// Turn relay off
+void LightSwitch_2_2() {
+  if (!Relay_state) return;
   digitalWrite(Relay_pin, HIGH);
   Relay_state = false;
-  //turn off, if it already is or not
 }
 
+// Adjusts stepper position in 25% increments based on direction
 int Nextv_stepper(bool dir) {
-  // true = +, false = -
-  Serial.println("---------value / max-------");
-  int value = ((double)Stepper_Lux[0]/(double)Stepper_Lux[1])*100;
-  Serial.println(value);
-  Serial.println("---------value / max----0-0----");
+  // Calculate the current percentage
+  int value = (Stepper_Lux[0] * 100) / Stepper_Lux[1];
 
-  if (dir) {
-    for (int i=0; i<5; i++) {
-      if (Step_25[i] > value) {
-        return Step_25[i];
-      }
+  if (dir) { // Moving up
+    for (int step : Step_25) {
+      if (step > value) return step;
     }
-    return 100;
+    return 100; // Max value
   }
-  Serial.println("begin door array heengaan");
-  for (int i=4; i>=0; i--) { //reversed search from last index to 0
-    Serial.println(Step_25[i]);
-    if (Step_25[i] < value) {
-      return Step_25[i];
-      Serial.println("einde door array heengaan");
-    }
+
+  for (int i = 4; i >= 0; i--) { // Moving down
+    if (Step_25[i] < value) return Step_25[i];
   }
-  return 0;
+  return 0; // Min value
 }
 
+// Adjusts servo position in 25% increments based on direction
 int Nextv_servo(bool dir) {
-  // true = +, false = -
-  if (dir) {
-    for (int i=0; i<5; i++) {
-      if (Servo_25[i] > Servo2_pos) {
-        return Servo_25[i];
+  if (dir) { // Opening
+    for (int step : Servo_25) {  
+      if (step > Servo2_pos) {
+        return step;
       }     
     }
-    return 180; 
+    return 180; // Max position
   }
-  for (int i=4; i>=0; i--) { //reversed search from last index to 0
+
+  // Closing
+  for (int i = 4; i >= 0; i--) { 
     if (Servo_25[i] < Servo2_pos) {
       return Servo_25[i];
     }
   }
-  return 0;
+  return 0; // Min position
 }
 
+// Controls the stepper motor movement based on the target position (0-100%)
 void Stepper_All(int pos) {
-  //Update leds
-  if (pos == 0) {
-    digitalWrite(LedPins[2], LOW);
-    digitalWrite(LedPins[3], HIGH);
-  } else if (pos == 100) {
-    digitalWrite(LedPins[3], LOW);
-    digitalWrite(LedPins[2], HIGH);
-  } else {
-    digitalWrite(LedPins[2], LOW);
-    digitalWrite(LedPins[3], LOW);
-  }
-    
-  //Check verkeerde input
-  if (pos<0 || pos>100) {
-    return;
-  }
+  // Validate input range
+  if (pos < 0 || pos > 100) return;
+
+  // Update LED indicators
+  digitalWrite(LedPins[2], pos == 100);
+  digitalWrite(LedPins[3], pos == 0);
   
-  //Graden -> steps
-  InputStep = ((double)pos/(double)100)*Stepper_Lux[1];
-  Serial.println(InputStep);
-  Serial.println("--------");
-  Serial.println(Stepper_Lux[1]);
-  if (InputStep==Stepper_Lux[0]) {
-    return;
-  }
+  // Convert percentage to step count
+  InputStep = (pos / 100.0) * Stepper_Lux[1];
+
+  // If already at the desired position, do nothing
+  if (InputStep == Stepper_Lux[0]) return;
+
+  // Determine direction and number of steps to move
   if (InputStep>Stepper_Lux[0]) {
     digitalWrite(Stepper_Lux[3], LOW);
     TakeSteps = InputStep - Stepper_Lux[0];
@@ -484,7 +458,8 @@ void Stepper_All(int pos) {
     digitalWrite(Stepper_Lux[3], HIGH);
     TakeSteps = Stepper_Lux[0] - InputStep;
   }
-  
+
+  // Move the stepper motor
   digitalWrite(StepOn, LOW);
   for (int j = 0; j < 1000; j++) {
     for (int i = 0; i < TakeSteps; i++) {
@@ -494,103 +469,81 @@ void Stepper_All(int pos) {
       delayMicroseconds(15);
     }
   }
+
+  // Update current step position
   Stepper_Lux[0] = InputStep;
   digitalWrite(StepOn, HIGH);
 }
 
-void Buzz(int select){
-  if (Buzz_on || select==5 || select==6) {
+// Controls buzzer
+void Buzz(int select) {
+  if (Buzz_on || select == 5) {
     tone(Buzzer, 1000, 50);
-    if (select == 1) {
-      delay(100);
-      tone(Buzzer, 1000, 50);
-    } else if (select == 2) {
-      delay(100);
-      tone(Buzzer, 1000, 50);
-      delay(100);
-      tone(Buzzer, 1000, 50);
-    } else if (select == 3) {
-      delay(100);
-      tone(Buzzer, 1000, 50);
-      delay(100);
-      tone(Buzzer, 1000, 50);
-      delay(100);
-      tone(Buzzer, 1000, 50);
-    } else if (select == 4) {
+
+    // Repeat tones if selected
+    int repeatCount = 1;
+    if (select == 2) repeatCount = 2;
+    else if (select == 3) repeatCount = 3;
+    else if (select == 4) {
       tone(Buzzer, 500, 400);
-    } else if (select == 5) {
+      return;
+    }
+
+    for (int i = 0; i < repeatCount; i++) {
       delay(100);
       tone(Buzzer, 1000, 50);
-    } else if (select == 6) {
-      delay(100);
-      tone(Buzzer, 1000, 50);
-      delay(100);
-      tone(Buzzer, 1000, 50);
+      if (i < repeatCount - 1) delay(100);
     }
   }
 }
 
+// Repositions the servo for a full turn to fix stuck blade :)
 void Reposition() {
   Servo2.attach(Servo2_pin);
   if (Sspeed) {
-    if (Servo2_pos >= 90) {
-      Servo2.write(0);
-      delay(2000);
-      Servo2.write(Servo2_pos);
-      delay(2000);
-    } else {
-      Servo2.write(180);
-      delay(2000);
-      Servo2.write(Servo2_pos);
-      delay(2000);
-    }
+    int targetPos = (Servo2_pos >= 90) ? 0 : 180;
+    Servo2.write(targetPos);
+    delay(2000);
+    Servo2.write(Servo2_pos);
+    delay(2000);
   } else {
-    if (Servo2_pos >= 90) {
-      for (int i=Servo2_pos; i>0; i--) {
-        Servo2.write(i);             
-        delay(50);                       // waits 15 ms for the servo to reach the position
-      }       
-      for (int i=0; i<Servo2_pos; i++) {
-        Servo2.write(i);             
-        delay(50);                       // waits 15 ms for the servo to reach the position
-      }       
-    } else {
-      for (int i=Servo2_pos; i<180; i++) {
-        Servo2.write(i);             
-        delay(50);                       // waits 15 ms for the servo to reach the position
-      }
-      for (int i=180; i>Servo2_pos; i--) {
-        Servo2.write(i);             
-        delay(50);                       // waits 15 ms for the servo to reach the position
-      }  
+    int Direction = (Servo2_pos >= 90) ? -1 : 1;
+    int targetPos = (Servo2_pos >= 90) ? 0 : 180;
+
+    for (int i = Servo2_pos; i != targetPos; i += Direction) {
+      Servo2.write(i);
+      delay(delayTime);
+    }
+
+    for (int i = targetPos; i != Servo2_pos; i -= Direction) {
+      Servo2.write(i);
+      delay(delayTime);
     }
   }
+
   Servo2.detach();
 }
 
+// Extracts all settings from Bluetooth received string
 String Parse_string(String data, int select) {
-  if (select == 0) {
-    data.remove(0, 4);
-    return data;
+  switch (select) {
+    case 0:
+      data.remove(0, 4);
+      break;
+    case 1:
+      data.remove(0, data.indexOf("#") + 1);
+      data.remove(0, data.indexOf("#"));
+      break;
+    case 2:
+      data.remove(0, data.indexOf("#"));
+      break;
+    default:
+      break;
   }
-  if (select == 1) {
-    data.remove(0, data.indexOf("#")+1);
-    data.remove(0, data.indexOf("#"));
-    return data;
-  }
-  if (select == 2) {
-    data.remove(0, data.indexOf("#"));
-    return data;
-  }
+  return data;
 }
 
-int Check_preset(int pos) {
-  if (Presets[pos] == "#xxu-t-z-"){
-    return 0;
-  }
-  return 1;
-}
-
+// Sets LDR threshold light levels
 void Set_ldr(String input) {
   String Settings = Parse_string(input, 1);
   int lightlevel = 0;
@@ -602,52 +555,39 @@ void Set_ldr(String input) {
     lightlevel = Parse_data(input, 14); 
   }
 
-  int Empty = true;
   for (int i=0; i<4; i++){
     if (LDRs[i].ll == lightlevel){
-      Empty = false;
-      Serial.print("f0");
       delay(1000);
       return;
     }
     if (LDRs[i].ll <= (lightlevel+50) && LDRs[i].ll >= (lightlevel-50)) {
-      Serial.print("f3");
       delay(1000);
       return;
     }
     if (LDRs[i].ll == -1) {
-      Empty = false;
       LDR_set = true;
       digitalWrite(LedPins[8], HIGH);
       LDRs[i].ll = lightlevel;
       LDRs[i].settings = Settings;
       LDRs[i].on = 1;
-      Serial.print("f1");
-      Serial.print(lightlevel);
       delay(1000);
       return;
     }
   }
-  if (Empty) {
-    Serial.print("f2");
-    delay(1000);
-  }
 }
 
+// Sets a timer for given datetime and settings
 void Set_timer(String input) {
   int Hour = Parse_data(input, 11);
   int Minute = Parse_data(input, 12);
   int Day = Parse_data(input, 10);
   String Settings = Parse_string(input, 1);
-  int Empty = true;
+
   for (int i=0; i<10; i++){
     if (Timers[i].dag == Day && Timers[i].uur == Hour && Timers[i].minuut == Minute){
-      Empty = false;
-      Serial.print("f0");
       return;
     }
     if (Timers[i].dag == -1) {
-      Empty = false;
       Timers_set = true;
       digitalWrite(LedPins[9], HIGH);
       Timers[i].dag = Day;
@@ -655,13 +595,16 @@ void Set_timer(String input) {
       Timers[i].minuut = Minute;
       Timers[i].settings = Settings;
       Timers[i].on = 1;
-      Serial.print("f1");
       return;
     } 
   }
-  if (Empty) {
-    Serial.print("f2");
+}
+
+int Check_preset(int pos) {
+  if (Presets[pos] == "#xxu-t-z-"){
+    return 0;
   }
+  return 1;
 }
 
 String Get_settings() {
@@ -675,229 +618,154 @@ String Get_settings() {
   return All_timers;
 }
 
+// Helper function to handle button actions
+void handleButtonPress(int buttonIndex, void (*action)()) {
+  if (buttons[buttonIndex].isPressed()) {
+    Buzz(0);
+    digitalWrite(LedPins[0], HIGH);
+    action();
+    digitalWrite(LedPins[0], LOW);
+  }
+}
+
 void loop() {
   // Check state of all physical buttons
   for (int i = 0; i < 9; i++) {
     buttons[i].loop();
   }
   
-  //Lightswitch 1
-  if(buttons[0].isPressed()) {
-    Buzz(0);
-    digitalWrite(LedPins[0], HIGH);
-    Lightswitch();
-    digitalWrite(LedPins[0], LOW);
-  }
-  //Preset button 4
-  if(buttons[1].isPressed()) {
-    Serial.println("37");
-    Buzz(0);
-    digitalWrite(LedPins[0], HIGH);
-    Lightswitch2();
-    digitalWrite(LedPins[0], LOW);
-  }
-  //Preset button 8
-  if(buttons[2].isPressed()) {
-    Serial.println("38");
-    Buzz(0);
-    digitalWrite(LedPins[0], HIGH);
-    int val = Nextv_stepper(true);
-    Stepper_All(val);
-    digitalWrite(LedPins[0], LOW);
-  }
-  //Lightbutton
-  if(buttons[3].isPressed()) {
-    Serial.println("39");
-    Buzz(0);
-    digitalWrite(LedPins[0], HIGH);
-    int val = Nextv_stepper(false);
-    Stepper_All(val);
-    digitalWrite(LedPins[0], LOW);
-  }
-  //Lux up 25%
-  if(buttons[4].isPressed()) {
-    Serial.println("40");
-    Buzz(0);
-    digitalWrite(LedPins[0], HIGH);
-    int val = Nextv_servo(true) * 1.5;
-    Serial.println(val);
-    Parse_and_execute("#xxu-t" + String(val) + "z-");
-    digitalWrite(LedPins[0], LOW);
-  }
+  // Button_1 Light switch 1 servo
+  handleButtonPress(0, LightSwitch);
 
-  //Tilt open 25%
-  if(buttons[5].isPressed()) {
-    Serial.println("41");
-    Buzz(0);
-    digitalWrite(LedPins[0], HIGH);
-    int val = Nextv_servo(false) * 1.5;
-    Serial.println(val);
-    Parse_and_execute("#xxu-t" + String(val) + "z-");
-    digitalWrite(LedPins[0], LOW);
-  }
-  
-  //Sun screen
-   if(buttons[6].isPressed()) {
-    Serial.println("42");
-    Buzz(4);
-    digitalWrite(LedPins[0], HIGH);
-    Calibrate_a();
-    Buzz(4);
-    digitalWrite(LedPins[0], LOW);
-   }
-   
-  //Lux down 25%
-  if(buttons[7].isPressed()) {
-    Serial.println("43");
-    Buzz(0);
-    digitalWrite(LedPins[0], HIGH);
-    Parse_and_execute(Presets[3]);
-    digitalWrite(LedPins[0], LOW);
-  }
-  //Tilt close 25%
-  if(buttons[8].isPressed()) {
-    Serial.println("45");
-    Buzz(0);
-    digitalWrite(LedPins[0], HIGH);
-    Parse_and_execute(Presets[7]);
-    digitalWrite(LedPins[0], LOW);
-  }
-  
-  //Microfone
- if (Mic_on) {
-   Mic_reading = analogRead(Mic_pin);
-   delay(10);
-   Mic_reading = analogRead(Mic_pin);
-   Serial.println(Mic_reading);
-   if (Mic_reading > 530) {
-     Serial.print(Mic_reading);
-     Mic();
-   }
- }
+  // Button_2 Light switch 2 relay
+  handleButtonPress(1, LightSwitch_2);
 
-  //RTC
-  DateTime now = rtc.now();
-  if (Tim_on) {
-    if (Timers_set) {
-        for (int i=0; i<10; i++) {
-            if (Timers[i].dag != -1) {
-                if (Timers[i].dag == now.dayOfTheWeek() || Timers[i].dag == 7) {
-                    if (Timers[i].uur == now.hour()) {
-                        if (Timers[i].minuut == now.minute()) {
-                            if (now.second() == 0) {
-                              Serial.println("juiste_minuut en seconde 0, Timer uitvoeren");
-                              Serial.println(Timers[i].settings);
-                              Parse_and_execute(Timers[i].settings);
-                              delay(1000);
-                            }
-                        }
-                    }
-                }
-            }
-        }
+  // Button_3 Move blinds up 25%
+  handleButtonPress(2, Stepper_All(Nextv_stepper(true)));
+
+  // Button_3 Move blinds down 25%
+  handleButtonPress(3, Stepper_All(Nextv_stepper(false)));
+
+  // Button_4 Tilt blinds open 25% 
+  handleButtonPress(4, Parse_and_execute("#xxu-t" + String(Nextv_servo(true) * 1.5) + "z-"));
+
+  // Button_5 Tilt blinds closed 25%
+  handleButtonPress(5, Parse_and_execute("#xxu-t" + String(Nextv_servo(false) * 1.5) + "z-"));
+
+  // Button_6 Start vertical calibration blinds
+  handleButtonPress(6, Calibrate_a(););
+
+  // Button_7 Execute preset 4 set by the app
+  handleButtonPress(7, Parse_and_execute(Presets[3]));
+
+  // Button_8 Execute preset 8 set by the app
+  handleButtonPress(8, Parse_and_execute(Presets[7]));
+  
+  // Detect audio spikes (1 or 2 claps) to trigger actions
+  if (Mic_on) {
+    Mic_reading = analogRead(Mic_pin);
+    delay(10);
+    Mic_reading = analogRead(Mic_pin);
+
+    if (Mic_reading > 530) {
+      Serial.print(Mic_reading);
+      ClapTrigger();
     }
   }
 
-  //LDR
-  if (LDR_set) {
-    if (Ldr_on) {
-      if (now.minute() % 5 == 0 && last_ldrtime != now.minute()) {
-        last_ldrtime = now.minute();
-        Serial.println(now.minute());
-        LDRValue = analogRead(LDR_pin);
-        Serial.println(LDRValue);
-        for (int i=0; i<4; i++) {
-          if (LDRs[i].on == 1) {
-            if (LDRs[i].ll <= (LDRValue+50) && LDRs[i].ll >= (LDRValue-50)) {
-              if (ldr_status[i] == 0) {
-                Serial.println("begint controle: nul naar 1");
-                ldr_status[i]++;
-              } else {
-                Serial.println("tweede keer zelfde waarde: 1 naar 2 naar nul");
-                Parse_and_execute(LDRs[i].settings);
-                ldr_status[i] = 0;
-                LDRs[i].on = 0;
-              }
-            } else {
-              Serial.println("waarde vervallen waarde varanderd, 1 naar nul");
-              ldr_status[i] = 0;
-            }
-          }
+  // RTC: Check and execute timers at the correct time
+  DateTime now = rtc.now();
+  if (Tim_on && Timers_set) {
+    for (int i = 0; i < 10; i++) {
+      if (Timers[i].dag == -1) continue;
+      if (Timers[i].dag != now.dayOfTheWeek() && Timers[i].dag != 7) continue;
+      if (Timers[i].uur != now.hour() || Timers[i].minuut != now.minute()) continue;
+      if (now.second() != 0) continue;
+      
+      Parse_and_execute(Timers[i].settings);
+      delay(1000);
+    }
+  }
+
+  // LDR: Measures every 5 minutes and checks if the light value falls within the set thresholds
+  if (LDR_set && Ldr_on && now.minute() % 5 == 0 && last_ldrtime != now.minute()) {
+    last_ldrtime = now.minute();
+
+    LDRValue = analogRead(LDR_pin);
+
+    for (int i = 0; i < 4; i++) {
+      if (LDRs[i].on != 1) continue;  // Skip if LDR setting is disabled
+
+      bool withinRange = (LDRs[i].ll >= LDRValue - 50) && (LDRs[i].ll <= LDRValue + 50);
+
+      if (withinRange) {
+        if (ldr_status[i] == 0) {
+          // First measurement: light value is within the threshold, increment status
+          ldr_status[i]++;
+        } else {
+          // Second measurement within the threshold, execute the action
+          Parse_and_execute(LDRs[i].settings);
+          ldr_status[i] = 0;
         }
+      } else {
+        // Light value is no longer within the range, reset the status
+        ldr_status[i] = 0;
       }
     }
   }
   
-  //Bluetooth input
-  if (Serial.available()>0) {
-    digitalWrite(LedPins[0], HIGH); 
-    Incoming_char = Serial.read();
+  // Bluetooth Input Handling: Receives commands over Bluetooth and triggers corresponding actions
+  if (Serial.available() > 0) {
+    digitalWrite(LedPins[0], HIGH); // Turn on activity light
+    Incoming_char = Serial.read(); // Read all incoming characters
+
+    // If we encounter a comma, process the command
     if (Incoming_char == ',') {
       if (Incoming_string.length() > 3 && Incoming_string[0] == '#') {
-        
-        Serial.println(Incoming_string);
-
-        //Presets (set and execute)
-        if (Incoming_string[1] == 'p'){
-          if (Incoming_string[2] == 's'){
+        // Handle Presets: Set or execute
+        if (Incoming_string[1] == 'p') {
+          // Set a new preset
+          if (Incoming_string[2] == 's') {
             Presets[Parse_data(Incoming_string, 3)] = Parse_string(Incoming_string, 0);
             Buzz(1);
-          } else {
+          } 
+          // Execute the preset
+          else {
             Parse_and_execute(Presets[Parse_data(Incoming_string, 3)]);
           }
         } 
-
-        //Booleans
-        //Microfone
+        // Toggle microphone, timer, ldr and buzzer on/off
         else if (Incoming_string == "#mic") {
-          if (Mic_on) {
-            Mic_on = false;
-            Buzz(2);
-          } else {
-            Mic_on = true;
-            Buzz(1);
-          }
-        //Ldr
-        } else if (Incoming_string == "#ldr") {
-          if (Ldr_on) {
-            Ldr_on = false;
-            Buzz(2);
-          } else {
-            Ldr_on = true;
-            Buzz(1);
-          }
-        //Buzzer
-        } else if (Incoming_string == "#buz") {
-          if (Buzz_on) {
-            Buzz_on = false;
-            Buzz(6);
-          } else {
-            Buzz_on = true;
-            Buzz(5);
-          }
-        //Timer
-        } else if (Incoming_string == "#tim") {
-          if (Tim_on) {
-            Tim_on = false;
-            Buzz(2);
-          } else {
-            Tim_on = true;
-            Buzz(1);
-          }
+          Mic_on = !Mic_on;
+          Buzz(Mic_on ? 1 : 2);
+        } 
+        else if (Incoming_string == "#ldr") {
+          Ldr_on = !Ldr_on;
+          Buzz(Ldr_on ? 1 : 2);
+        } 
+        else if (Incoming_string == "#buz") {
+          Buzz_on = !Buzz_on;
+          Buzz(5);
+        } 
+        else if (Incoming_string == "#tim") {
+          Tim_on = !Tim_on;
+          Buzz(Tim_on ? 1 : 2);
         }
-        
-        //Set microfone functions
+        // Setting microphone actions
         else if (Incoming_string[1] == 's') {
           Mic_functions[Parse_data(Incoming_string, 3)] = Parse_string(Incoming_string, 0);
           Buzz(1);
-        //Set LDR fuctions
-        } else if (Incoming_string[2] == 'd') {
+        } 
+        // Setting light threshold and settings
+        else if (Incoming_string[2] == 'd') {
           Set_ldr(Incoming_string);
-        //Calibrate b
-        } else if (Incoming_string == "#ka0") {
+        }
+        // Start vertical calibration blinds
+        else if (Incoming_string == "#ka0") {
           Calibrate_b();
-        //Set RTC
-        } else if (Incoming_string[1] == 'r') {
+        }
+        // Set RTC with data from app
+        else if (Incoming_string[1] == 'r') {
           int Day = Parse_data(Incoming_string, 4);
           int Hour = Parse_data(Incoming_string, 5);
           int Minute = Parse_data(Incoming_string, 6);
@@ -905,49 +773,52 @@ void loop() {
           int Month = Parse_data(Incoming_string, 8);
           int Seconds = Parse_data(Incoming_string, 9);
           rtc.adjust(DateTime(Year, Month, Day, Hour, Minute, Seconds));
-          Serial.println("DONE");
-        //Pull status buttons, position motors and temparature RTC
-        } else if (Incoming_string == "#1pull") {
+        }
+        // Fetch status of buttons, position of motors and temperature
+        else if (Incoming_string == "#1pull") {
           Serial.print("");
           Serial.print('#' + String(Mic_on) + String(Ldr_on) + String(Buzz_on) + String(Tim_on) + Check_preset(0) + Check_preset(1) + Check_preset(2) + Check_preset(3) + Check_preset(4) + Check_preset(5) + Check_preset(6) + Check_preset(7) + 'u' + (int(double(Stepper_Lux[0])/double(Stepper_Lux[1])*100)) + 't' + int(double(Servo2_pos)*1.5) + 'z' + "100" + 'i' + rtc.getTemperature() + ',');
-        //Set timer
-        } else if (Incoming_string[1] == 't') {
+        }
+        // Set new Timer with time and settings
+        else if (Incoming_string[1] == 't') {
           Set_timer(Incoming_string);
-        //Pull settings
-        } else if (Incoming_string == "#Top") {
+        }
+        // Fetch all settings for LDR and timer
+        else if (Incoming_string == "#Top") {
           Serial.print('[');
           Serial.print(Get_settings());
           Serial.print(']');
-        //Set Timer on/off
-        } else if (Incoming_string[1] == 'q') {
-          if (Timers[Parse_data(Incoming_string, 13)].on == 1) {
-            Timers[Parse_data(Incoming_string, 13)].on = 0;
-          } else {
-            Timers[Parse_data(Incoming_string, 13)].on = 1;
-          }
+        }
+        // Toggle a specific timer on/off
+        else if (Incoming_string[1] == 'q') {
+          int timerIndex = Parse_data(Incoming_string, 13);
+          Timers[timerIndex].on = !Timers[timerIndex].on;
+
+          // Check if any timer is active and toggle led accordingly
           bool Off = true;
-          for (int i=0; i<10; i++) {
+          for (int i = 0; i < 10; i++) {
             if (Timers[i].on == 1) {
               Off = false;
             }
           }
-          if (Off) {
-            digitalWrite(LedPins[9], LOW);
-          } else {
-            digitalWrite(LedPins[9], HIGH);
-          }
-        //Empty timers list
-        } else if (Incoming_string[1] == 'w') {
-          for (int i=0; i<10; i++) {                             
-            Timers[i].dag = -1; //mit app check alleen de dag
+          digitalWrite(LedPins[9], Off ? LOW : HIGH);
+        }
+        // Clear all timers and turn off timer LED
+        else if (Incoming_string[1] == 'w') {
+          for (int i = 0; i < 10; i++) {
+            Timers[i].dag = -1;
           }
           Timers_set = false;
           digitalWrite(LedPins[9], LOW);
-        //Remove single timer
-        } else if (Incoming_string[1] == 'c') {
-          Timers[Parse_data(Incoming_string, 13)].dag = -1; //mit app check alleen de dag
+        }
+        // Remove a single timer from the list
+        else if (Incoming_string[1] == 'c') {
+          int timerIndex = Parse_data(Incoming_string, 13);
+          Timers[timerIndex].dag = -1;
+
+          // Check if any timers are still active, update the status and LED accordingly
           bool Empty = true;
-          for (int i=0; i<10; i++) {
+          for (int i = 0; i < 10; i++) {
             if (Timers[i].dag != -1) {
               Empty = false;
             }
@@ -956,36 +827,37 @@ void loop() {
             Timers_set = false;
             digitalWrite(LedPins[9], LOW);
           }
-        //Set ldr on/off
-        } else if (Incoming_string[1] == 'v') {
-          if (LDRs[Parse_data(Incoming_string, 13)].on == 1) {
-            LDRs[Parse_data(Incoming_string, 13)].on = 0;
-          } else {
-            LDRs[Parse_data(Incoming_string, 13)].on = 1;
-          }
+        }
+        // Toggle a specific LDR setting and status LED on/off
+        else if (Incoming_string[1] == 'v') {
+          int ldrIndex = Parse_data(Incoming_string, 13);
+          LDRs[ldrIndex].on = !LDRs[ldrIndex].on;
+
+          // Check if any LDR is active
           bool Off = true;
-          for (int i=0; i<4; i++) {
+          for (int i = 0; i < 4; i++) {
             if (LDRs[i].on == 1) {
               Off = false;
             }
           }
-          if (Off) {
-            digitalWrite(LedPins[8], LOW);
-          } else {
-            digitalWrite(LedPins[8], HIGH);
-          }
-        //Empty ldr list
-        } else if (Incoming_string[1] == 'y') {
-          for (int i=0; i<4; i++) {
-            LDRs[i].ll = -1; //mit app check alleen lightlevel
+          digitalWrite(LedPins[8], Off ? LOW : HIGH);
+        }
+        // Clear all LDR settings and turn off LDR LED
+        else if (Incoming_string[1] == 'y') {
+          for (int i = 0; i < 4; i++) {
+            LDRs[i].ll = -1;
           }
           LDR_set = false;
           digitalWrite(LedPins[8], LOW);
-        //Remove single ldr
-        } else if (Incoming_string[1] == 'z') {
-          LDRs[Parse_data(Incoming_string, 13)].ll = -1; //mit app check alleen de dag
-          int Empty = true;
-          for (int i=0; i<4; i++) {
+        }
+        // Remove a single LDR setting from the list
+        else if (Incoming_string[1] == 'z') {
+          int ldrIndex = Parse_data(Incoming_string, 13);
+          LDRs[ldrIndex].ll = -1;
+          bool Empty = true;
+
+          // Check if any LDR is still active, update the status and LED accordingly
+          for (int i = 0; i < 4; i++) {
             if (LDRs[i].ll != -1) {
               Empty = false;
             }
@@ -994,21 +866,24 @@ void loop() {
             LDR_set = false;
             digitalWrite(LedPins[8], LOW);
           }
-        } else if (Incoming_string == "#lal0") {
+        }
+        // Reposition blades if stuck :)
+        else if (Incoming_string == "#lal0") {
           Reposition();
-          Serial.println("recalibrate tilt");
-        } else if (Incoming_string == "#lal1") {
-          Speed();
-          Serial.println("speed servo");
-        } else { //Overig: uitvoeren van opdracht (format: '#llu50t50z50')
+        } 
+        // Set speed of blinds tilt (slow -> quiet)
+        else if (Incoming_string == "#lal1") {
+          BlindsSpeed();
+        }
+        // MAIN: Directly execute instructions with general format
+        else {
           Parse_and_execute(Incoming_string);
         }
-        Incoming_string = "";
+        Incoming_string = ""; // Reset string after processing
       }
+    } else {
+      Incoming_string += Incoming_char; // Append received character to the string
     }
-    else {
-      Incoming_string += Incoming_char;
-    }
-    digitalWrite(LedPins[0], LOW);
+    digitalWrite(LedPins[0], LOW); // Turn off activity LED
   }
 }
