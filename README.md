@@ -22,9 +22,12 @@ The system allows multiple control methods:
 - **Servos** – Adjusts the tilt of blinds and controls lights with configurable speed and range of motion.
 
 ## ▶️ Demonstration
-| Mobile App Interface | Blinds and light control |
-|----------------------------------|-----------------------------------|
-| ![UI Mobile App](assets/ui_demo.gif) | ![Blinds in Action](assets/demo.gif) |
+
+### Mobile App Interface
+<img src="assets/ui_demo.gif" style="width: 500px;" />
+
+### Blinds and light control
+<img src="assets/demo.gif" style="width: 500px;" />
 
 ## 🧩 Technical Challenges
 - **Power Management** – Ensuring stable power delivery to stepper motors, servos, and sensors took some fine-tuning —and a few exploding capacitors— to get it right.
